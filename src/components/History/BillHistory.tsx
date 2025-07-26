@@ -1,19 +1,46 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, Filter, Download, Eye, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
+import { db } from '../../lib/api'; // Import your API functions
 
 interface BillHistoryProps {
   bills: any[];
 }
 
 const BillHistory: React.FC<BillHistoryProps> = ({ bills }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+   const [isLoading, setIsLoading] = useState(false);
+  const [localBills, setLocalBills] = useState(bills); // Local state for bills
+    const [searchTerm, setSearchTerm] = useState('');
   const [filterBy, setFilterBy] = useState('all');
   const [sortBy, setSortBy] = useState('date_desc');
   const [selectedBill, setSelectedBill] = useState<any>(null);
 
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const billsData = await db.getBills(); // Direct API call
+        setLocalBills(billsData);
+      } catch (error) {
+        console.error('Error refreshing data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []); // Empty dependency array means this runs only on mount
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   // Filter and sort bills
-  const filteredBills = bills
+  const filteredBills = localBills
     .filter(bill => {
       const matchesSearch = 
         bill.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

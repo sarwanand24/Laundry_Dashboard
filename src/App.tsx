@@ -7,7 +7,7 @@ import InventoryManager from './components/Inventory/InventoryManager';
 import EmployeeManager from './components/Employees/EmployeeManager';
 import AnalyticsDashboard from './components/Analytics/AnalyticsDashboard';
 import BillHistory from './components/History/BillHistory';
-import { db } from './lib/mongodb';
+import { db } from './lib/api';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -50,7 +50,8 @@ function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardOverview bills={bills} employees={employees} clothes={clothes} />;
+        return <DashboardOverview bills={bills} employees={employees} clothes={clothes}
+         setActiveTab={setActiveTab} refreshData={loadData} />;
       case 'billing':
         return <BillingPad />;
       case 'inventory':
@@ -58,11 +59,13 @@ function App() {
       case 'employees':
         return <EmployeeManager />;
       case 'analytics':
-        return <AnalyticsDashboard bills={bills} employees={employees} clothes={clothes} payments={payments} />;
+        return <AnalyticsDashboard bills={bills} employees={employees} clothes={clothes}
+         payments={payments} refreshData={loadData} />;
       case 'history':
         return <BillHistory bills={bills} />;
       default:
-        return <DashboardOverview bills={bills} employees={employees} clothes={clothes} />;
+        return <DashboardOverview bills={bills} employees={employees} clothes={clothes} 
+        setActiveTab={setActiveTab} refreshData={loadData} />;
     }
   };
 

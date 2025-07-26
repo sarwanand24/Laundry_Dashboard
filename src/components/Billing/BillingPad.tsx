@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Minus, Download, Trash2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import jsPDF from 'jspdf';
-import { db } from '../../lib/mongodb';
+import { db } from '../../lib/api';
 
 interface Customer {
   name: string;
@@ -51,7 +51,7 @@ const BillingPad: React.FC = () => {
 
   const addItemToBill = (cloth: any) => {
     const existingItem = billItems.find(item => item.clothId === cloth._id);
-    
+
     if (existingItem) {
       setBillItems(billItems.map(item =>
         item.clothId === cloth._id
@@ -91,54 +91,79 @@ const BillingPad: React.FC = () => {
 
   const generatePDF = (customer: Customer) => {
     const pdf = new jsPDF();
-    
-    // Header
-    pdf.setFontSize(20);
-    pdf.setTextColor(0, 100, 200);
-    pdf.text('LaundryWalaa', 20, 20);
-    
-    pdf.setFontSize(16);
-    pdf.setTextColor(0, 0, 0);
-    pdf.text('Invoice', 20, 35);
-    
-    // Bill Number and Date
-    const billNumber = `LW${Date.now()}`;
-    pdf.setFontSize(10);
-    pdf.text(`Bill No: ${billNumber}`, 20, 45);
-    pdf.text(`Date: ${new Date().toLocaleDateString()}`, 20, 50);
-    
-    // Customer Details
-    pdf.setFontSize(12);
-    pdf.text('Bill To:', 20, 65);
-    pdf.setFontSize(10);
-    pdf.text(`Name: ${customer.name}`, 20, 75);
-    pdf.text(`Phone: ${customer.phone}`, 20, 80);
-    pdf.text(`Address: ${customer.address}`, 20, 85);
-    
-    // Items Table Header
-    pdf.setFontSize(10);
-    pdf.text('Item', 20, 105);
-    pdf.text('Qty', 90, 105);
-    pdf.text('Rate', 120, 105);
-    pdf.text('Amount', 160, 105);
-    
-    // Items
-    let yPosition = 115;
-    billItems.forEach((item) => {
-      pdf.text(item.name, 20, yPosition);
-      pdf.text(item.quantity.toString(), 90, yPosition);
-      pdf.text(`₹${item.price}`, 120, yPosition);
-      pdf.text(`₹${item.subtotal}`, 160, yPosition);
-      yPosition += 10;
-    });
-    
-    // Totals
-    yPosition += 10;
-    pdf.text(`Subtotal: ₹${subtotal}`, 120, yPosition);
-    pdf.text(`Discount (${discount}%): -₹${discountAmount.toFixed(2)}`, 120, yPosition + 10);
-    pdf.setFontSize(12);
-    pdf.text(`Total: ₹${total.toFixed(2)}`, 120, yPosition + 25);
-    
+
+ // === HEADER ===
+pdf.setFillColor(0, 123, 255); // vibrant blue
+pdf.rect(0, 0, 210, 30, 'F'); // full-width header
+pdf.setTextColor(255, 255, 255);
+pdf.setFontSize(22);
+pdf.setFont('helvetica', 'bold');
+pdf.text('LaundryWalaa Invoice', 105, 20, { align: 'center' });
+
+// === BILL INFO ===
+const billNumber = `LW${Date.now()}`;
+pdf.setFontSize(10);
+pdf.setTextColor(0);
+pdf.text(`Bill No: ${billNumber}`, 15, 40);
+pdf.text(`Date: ${new Date().toLocaleDateString()}`, 15, 46);
+
+// === CUSTOMER DETAILS ===
+pdf.setFillColor(245, 245, 245); // light gray background
+pdf.roundedRect(10, 55, 190, 25, 2, 2, 'F');
+pdf.setTextColor(0);
+pdf.setFontSize(11);
+pdf.setFont('helvetica', 'normal');
+pdf.text(`Customer Name: ${customer.name}`, 15, 65);
+pdf.text(`Phone: ${customer.phone}`, 15, 71);
+pdf.text(`Address: ${customer.address}`, 15, 77);
+
+// === ITEMS TABLE HEADER ===
+pdf.setFillColor(220, 235, 255); // light blue background
+pdf.rect(10, 85, 190, 10, 'F');
+pdf.setFontSize(11);
+pdf.setTextColor(0, 102, 204);
+pdf.setFont('helvetica', 'bold');
+pdf.text('Item', 15, 92);
+pdf.text('Qty', 90, 92);
+pdf.text('Rate', 120, 92);
+pdf.text('Amount', 160, 92);
+
+// === ITEMS LIST ===
+let yPosition = 102;
+pdf.setFontSize(10);
+pdf.setFont('helvetica', 'normal');
+pdf.setTextColor(0);
+billItems.forEach((item) => {
+  pdf.text(item.name, 15, yPosition);
+  pdf.text(item.quantity.toString(), 90, yPosition);
+  pdf.text(`INR ${item.price}`, 120, yPosition);
+  pdf.text(`INR ${item.subtotal}`, 160, yPosition);
+  yPosition += 8;
+});
+
+// === TOTALS SECTION ===
+yPosition += 10;
+pdf.setFillColor(230, 240, 255); // soft blue
+pdf.roundedRect(110, yPosition, 90, 32, 3, 3, 'F');
+
+pdf.setTextColor(40, 40, 40);
+pdf.setFontSize(10);
+pdf.setFont('helvetica', 'normal');
+pdf.text(`Subtotal`, 115, yPosition + 9);
+pdf.text(`INR ${subtotal.toFixed(2)}`, 195, yPosition + 9, { align: 'right' });
+
+pdf.setTextColor(200, 80, 80); // red for discount
+pdf.text(`Discount (${discount}%)`, 115, yPosition + 17);
+pdf.text(`-INR ${discountAmount.toFixed(2)}`, 195, yPosition + 17, { align: 'right' });
+
+pdf.setTextColor(0, 102, 204); // total blue
+pdf.setFontSize(12);
+pdf.setFont('helvetica', 'bold');
+pdf.text(`Total`, 115, yPosition + 29);
+pdf.text(`INR ${total.toFixed(2)}`, 195, yPosition + 29, { align: 'right' });
+
+
+
     pdf.save(`bill-${billNumber}.pdf`);
   };
 
@@ -158,7 +183,7 @@ const BillingPad: React.FC = () => {
 
     await db.addBill(bill);
     generatePDF(customer);
-    
+
     // Reset form
     setBillItems([]);
     setDiscount(0);
@@ -169,7 +194,7 @@ const BillingPad: React.FC = () => {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h2 className="text-3xl font-bold text-gray-900 mb-8">Billing Pad</h2>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left Column - Customer & Items */}
         <div className="space-y-6">
@@ -186,7 +211,7 @@ const BillingPad: React.FC = () => {
                 />
                 {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>}
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
                 <input
@@ -196,7 +221,7 @@ const BillingPad: React.FC = () => {
                 />
                 {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone.message}</p>}
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                 <textarea
@@ -223,7 +248,7 @@ const BillingPad: React.FC = () => {
                   placeholder="Search for clothes..."
                 />
               </div>
-              
+
               {showSuggestions && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                   {filteredClothes.map((cloth) => (
@@ -245,7 +270,7 @@ const BillingPad: React.FC = () => {
         {/* Right Column - Bill Summary */}
         <div className="bg-white rounded-xl shadow-lg p-6">
           <h3 className="text-xl font-bold text-gray-900 mb-4">Bill Summary</h3>
-          
+
           {/* Bill Items */}
           <div className="space-y-3 mb-6 max-h-64 overflow-y-auto">
             {billItems.map((item) => (
@@ -254,7 +279,7 @@ const BillingPad: React.FC = () => {
                   <h4 className="font-semibold text-gray-900">{item.name}</h4>
                   <p className="text-sm text-gray-600">₹{item.price} each</p>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => updateQuantity(item.clothId, -1)}
@@ -276,13 +301,13 @@ const BillingPad: React.FC = () => {
                     <Trash2 size={16} />
                   </button>
                 </div>
-                
+
                 <div className="text-right ml-4">
                   <p className="font-bold text-gray-900">₹{item.subtotal}</p>
                 </div>
               </div>
             ))}
-            
+
             {billItems.length === 0 && (
               <p className="text-gray-500 text-center py-8">No items added yet</p>
             )}

@@ -1,13 +1,43 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { TrendingUp, Users, Package, Receipt } from 'lucide-react';
 
 interface DashboardOverviewProps {
   bills: any[];
   employees: any[];
   clothes: any[];
+  setActiveTab: (tab: string) => void;
+  refreshData?: () => Promise<void>;
 }
 
-const DashboardOverview: React.FC<DashboardOverviewProps> = ({ bills, employees, clothes }) => {
+const DashboardOverview: React.FC<DashboardOverviewProps> = ({ bills, employees, clothes, setActiveTab, refreshData }) => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Refresh data when component mounts and when date range changes
+  useEffect(() => {
+    const fetchData = async () => {
+      if (refreshData) {
+        setIsLoading(true);
+        try {
+          await refreshData();
+        } catch (error) {
+          console.error('Error refreshing data:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+  }, []); // Add refreshData to dependencies
+
+    if (isLoading) {
+    return (
+      <div className="p-6 flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   const todaysSales = bills
     .filter(bill => {
       const today = new Date().toDateString();
@@ -99,13 +129,19 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ bills, employees,
         <div className="bg-white rounded-xl shadow-lg p-6">
           <h3 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h3>
           <div className="space-y-3">
-            <button className="w-full p-4 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-cyan-700 transition-all duration-200">
+            <button 
+            onClick={() => setActiveTab('billing')}
+            className="w-full p-4 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-cyan-700 transition-all duration-200">
               Create New Bill
             </button>
-            <button className="w-full p-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all duration-200">
+            <button 
+            onClick={() => setActiveTab('inventory')}
+            className="w-full p-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all duration-200">
               Add New Item
             </button>
-            <button className="w-full p-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg font-semibold hover:from-purple-600 hover:to-pink-700 transition-all duration-200">
+            <button 
+            onClick={() => setActiveTab('analytics')}
+            className="w-full p-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg font-semibold hover:from-purple-600 hover:to-pink-700 transition-all duration-200">
               View Analytics
             </button>
           </div>

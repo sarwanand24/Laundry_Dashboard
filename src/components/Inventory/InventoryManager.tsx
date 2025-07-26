@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Save, X } from 'lucide-react';
-import { db } from '../../lib/mongodb';
+import { db } from '../../lib/api';
 
 interface ClothItem {
   _id?: string;

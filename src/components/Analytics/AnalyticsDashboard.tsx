@@ -11,10 +11,40 @@ interface AnalyticsDashboardProps {
   employees: any[];
   clothes: any[];
   payments: any[];
+  refreshData?: () => Promise<void>;
 }
 
-const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ bills, employees, clothes, payments }) => {
-  const [dateRange, setDateRange] = useState('month');
+const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ bills, employees, clothes, payments, refreshData }) => {
+   const [dateRange, setDateRange] = useState('month');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Refresh data when component mounts and when date range changes
+  useEffect(() => {
+    const fetchData = async () => {
+      if (refreshData) {
+        setIsLoading(true);
+        try {
+          await refreshData();
+        } catch (error) {
+          console.error('Error refreshing data:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+  }, [dateRange]); // Add refreshData to dependencies
+
+  // ... rest of your component code ...
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
   // Calculate daily sales data
   const dailySalesData = bills.reduce((acc: any, bill) => {
@@ -50,25 +80,25 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ bills, employee
   }, []).sort((a: any, b: any) => b.quantity - a.quantity).slice(0, 5);
 
   // Employee performance data
-  const employeeData = employees.map(emp => {
-    const empPayments = payments.filter(p => p.employeeId === emp._id);
-    const totalPaid = empPayments.reduce((sum, p) => sum + p.paidAmount, 0);
-    const totalDue = empPayments.reduce((sum, p) => sum + (p.dueAmount - p.paidAmount), 0);
-    
-    return {
-      name: emp.name,
-      paid: totalPaid,
-      due: totalDue,
-      total: totalPaid + totalDue
-    };
-  });
+const employeeData = employees.map(emp => {
+  const empPayments = payments.filter(p => p.employeeId === emp._id);
+  const totalPaid = empPayments.reduce((sum, p) => sum + (p.paid ? p.amountPaid : 0), 0);
+  const totalDue = empPayments.reduce((sum, p) => sum + (!p.paid ? p.amountPaid : 0), 0);
+  
+  return {
+    name: emp.name,
+    paid: totalPaid,
+    due: totalDue,
+    total: totalPaid + totalDue
+  };
+});
 
   const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
   const totalRevenue = bills.reduce((sum, bill) => sum + bill.total, 0);
   const totalOrders = bills.length;
   const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-  const totalEmployeeCost = payments.reduce((sum, p) => sum + p.paidAmount, 0);
+  const totalEmployeeCost = payments.reduce((sum, p) => sum + p.amountPaid, 0);
 
   return (
     <div className="p-6">

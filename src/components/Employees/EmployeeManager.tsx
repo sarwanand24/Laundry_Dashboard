@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Save, X, User, Calendar, Clock, DollarSign } from 'lucide-react';
 import { format, startOfMonth, addMonths, differenceInMonths, getDaysInMonth } from 'date-fns';
-import { db } from '../../lib/mongodb';
+import { db } from '../../lib/api';
 
 interface Employee {
   _id?: string;
@@ -16,11 +16,11 @@ interface Payment {
   _id?: string;
   employeeId: string;
   month: string;
-  year: number;
-  dueAmount: number;
-  paidAmount: number;
-  status: 'paid' | 'due' | 'partial';
-  paidDate?: Date;
+  paid: boolean;
+  amountPaid: number;
+  createdAt?: Date;
+  // Frontend-only calculated field
+  dueAmount?: number;
 }
 
 const EmployeeManager: React.FC = () => {
@@ -29,6 +29,7 @@ const EmployeeManager: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [newEmployee, setNewEmployee] = useState<Employee>({
     name: '',
     joiningDate: new Date(),
@@ -57,12 +58,12 @@ const EmployeeManager: React.FC = () => {
     return payments.filter(p => p.employeeId === employeeId);
   };
 
-  const generateMonthlyPayments = (employee: Employee) => {
+ const generateMonthlyPayments = (employee: Employee) => {
     const currentDate = new Date();
     const joiningDate = new Date(employee.joiningDate);
     const monthsDiff = differenceInMonths(currentDate, joiningDate);
     
-    const generatedPayments = [];
+    const generatedPayments: Payment[] = [];
     
     for (let i = 0; i <= monthsDiff; i++) {
       const monthDate = addMonths(joiningDate, i);
@@ -76,10 +77,9 @@ const EmployeeManager: React.FC = () => {
         generatedPayments.push({
           employeeId: employee._id!,
           month: monthKey,
-          year: monthDate.getFullYear(),
-          dueAmount: calculateMonthlyPayment(employee),
-          paidAmount: 0,
-          status: 'due' as const
+          paid: false,
+          amountPaid: 0,
+          dueAmount: calculateMonthlyPayment(employee)
         });
       }
     }
@@ -105,11 +105,22 @@ const EmployeeManager: React.FC = () => {
     loadData();
   };
 
-  const handleEditEmployee = async (id: string, updates: Partial<Employee>) => {
-    await db.updateEmployee(id, updates);
-    setEditingId(null);
-    loadData();
-  };
+const startEditing = (employee: Employee) => {
+  setEditingId(employee._id!);
+  setEditEmployee({ ...employee });
+};
+
+const handleEditEmployee = async () => {
+  if (!editEmployee || !editEmployee._id || !editEmployee.name || editEmployee.hourlyRate <= 0) {
+    alert('Please fill all fields correctly');
+    return;
+  }
+
+  await db.updateEmployee(editEmployee._id, editEmployee);
+  setEditingId(null);
+  setEditEmployee(null);
+  loadData();
+};
 
   const handleDeleteEmployee = async (id: string) => {
     if (confirm('Are you sure you want to delete this employee?')) {
@@ -118,9 +129,51 @@ const EmployeeManager: React.FC = () => {
     }
   };
 
-  const updatePaymentStatus = async (employeeId: string, month: string, updates: any) => {
-    await db.updatePayment(employeeId, month, updates);
-    loadData();
+ const updatePaymentStatus = async (employeeId: string, month: string, paid: boolean) => {
+    try {
+      // Find the existing payment to get the amount
+      const existingPayment = payments.find(p => 
+        p.employeeId === employeeId && p.month === month
+      );
+      
+      const amount = existingPayment?.amountPaid || calculateMonthlyPayment(
+        employees.find(e => e._id === employeeId)!
+      );
+
+      const updatedPayment = await db.updatePayment(employeeId, month, {
+        paid,
+        amountPaid: amount
+      });
+      
+      // Update local state immediately
+      setPayments(prevPayments => {
+        const existingIndex = prevPayments.findIndex(
+          p => p.employeeId === employeeId && p.month === month
+        );
+        
+        if (existingIndex >= 0) {
+          const updated = [...prevPayments];
+          updated[existingIndex] = { 
+            ...updated[existingIndex], 
+            paid,
+            amountPaid: amount
+          };
+          return updated;
+        } else {
+          return [...prevPayments, {
+            employeeId,
+            month,
+            paid,
+            amountPaid: amount,
+            dueAmount: calculateMonthlyPayment(
+              employees.find(e => e._id === employeeId)!
+            )
+          }];
+        }
+      });
+    } catch (error) {
+      console.error('Error updating payment:', error);
+    }
   };
 
   return (
@@ -211,13 +264,102 @@ const EmployeeManager: React.FC = () => {
         </div>
       )}
 
+ {editingId && editEmployee && (
+  <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+    <h3 className="text-xl font-bold text-gray-900 mb-4">Edit Employee</h3>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+        <input
+          value={editEmployee.name}
+          onChange={(e) => setEditEmployee({ ...editEmployee, name: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="Enter employee name"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Joining Date</label>
+        <input
+          type="date"
+          value={format(new Date(editEmployee.joiningDate), 'yyyy-MM-dd')}
+          onChange={(e) => setEditEmployee({ 
+            ...editEmployee, 
+            joiningDate: new Date(e.target.value) 
+          })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Working Days/Week</label>
+        <input
+          type="number"
+          value={editEmployee.workingDaysPerWeek}
+          onChange={(e) => setEditEmployee({ 
+            ...editEmployee, 
+            workingDaysPerWeek: Number(e.target.value) 
+          })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          min="1"
+          max="7"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Daily Hours</label>
+        <input
+          type="number"
+          value={editEmployee.dailyHours}
+          onChange={(e) => setEditEmployee({ 
+            ...editEmployee, 
+            dailyHours: Number(e.target.value) 
+          })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          min="1"
+          max="24"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Rate (₹)</label>
+        <input
+          type="number"
+          value={editEmployee.hourlyRate}
+          onChange={(e) => setEditEmployee({ 
+            ...editEmployee, 
+            hourlyRate: Number(e.target.value) 
+          })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          min="0"
+        />
+      </div>
+    </div>
+    <div className="flex space-x-3 mt-4">
+      <button
+        onClick={handleEditEmployee}
+        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+      >
+        <Save size={16} />
+        <span>Save Changes</span>
+      </button>
+      <button
+        onClick={() => {
+          setEditingId(null);
+          setEditEmployee(null);
+        }}
+        className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center space-x-2"
+      >
+        <X size={16} />
+        <span>Cancel</span>
+      </button>
+    </div>
+  </div>
+)}
+
       {/* Employees Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {employees.map((employee) => {
           const monthlyPayment = calculateMonthlyPayment(employee);
           const employeePayments = getEmployeePayments(employee._id!);
-          const paidPayments = employeePayments.filter(p => p.status === 'paid');
-          const duePayments = employeePayments.filter(p => p.status === 'due');
+          const paidPayments = employeePayments.filter(p => p.paid);
+          const duePayments = employeePayments.filter(p => !p.paid);
           
           return (
             <div key={employee._id} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300">
@@ -236,7 +378,7 @@ const EmployeeManager: React.FC = () => {
                 
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => setEditingId(employee._id!)}
+                    onClick={() => startEditing(employee)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                   >
                     <Edit size={16} />
@@ -309,9 +451,9 @@ const EmployeeManager: React.FC = () => {
 interface EmployeePaymentModalProps {
   employee: Employee;
   payments: Payment[];
-  generatedPayments: any[];
+  generatedPayments: Payment[];
   onClose: () => void;
-  onUpdatePayment: (employeeId: string, month: string, updates: any) => void;
+  onUpdatePayment: (employeeId: string, month: string, paid: boolean) => void;
 }
 
 const EmployeePaymentModal: React.FC<EmployeePaymentModalProps> = ({
@@ -331,26 +473,17 @@ const EmployeePaymentModal: React.FC<EmployeePaymentModalProps> = ({
     }
   });
 
-  const duePayments = allPayments.filter(p => p.status === 'due');
-  const paidPayments = allPayments.filter(p => p.status === 'paid');
+  const duePayments = allPayments.filter(p => !p.paid);
+  const paidPayments = allPayments.filter(p => p.paid);
 
-  const markAsPaid = (payment: any) => {
-    onUpdatePayment(employee._id!, payment.month, {
-      ...payment,
-      status: 'paid',
-      paidAmount: payment.dueAmount,
-      paidDate: new Date()
-    });
+  const markAsPaid = async (payment: Payment) => {
+    await onUpdatePayment(employee._id!, payment.month, true);
   };
 
-  const markAsDue = (payment: any) => {
-    onUpdatePayment(employee._id!, payment.month, {
-      ...payment,
-      status: 'due',
-      paidAmount: 0,
-      paidDate: null
-    });
+  const markAsDue = async (payment: Payment) => {
+    await onUpdatePayment(employee._id!, payment.month, false);
   };
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -405,7 +538,7 @@ const EmployeePaymentModal: React.FC<EmployeePaymentModalProps> = ({
                       <h4 className="font-semibold text-gray-900">
                         {format(new Date(payment.month + '-01'), 'MMMM yyyy')}
                       </h4>
-                      <p className="text-red-600 font-bold">₹{payment.dueAmount.toLocaleString()}</p>
+                      <p className="text-red-600 font-bold">₹{(payment.dueAmount || payment.amountPaid || 0).toLocaleString()}</p>
                     </div>
                     <button
                       onClick={() => markAsPaid(payment)}
@@ -421,7 +554,7 @@ const EmployeePaymentModal: React.FC<EmployeePaymentModalProps> = ({
               </div>
             )}
 
-            {activeTab === 'paid' && (
+           {activeTab === 'paid' && (
               <div className="space-y-3">
                 {paidPayments.map((payment) => (
                   <div key={payment.month} className="bg-green-50 border border-green-200 rounded-lg p-4 flex justify-between items-center">
@@ -429,12 +562,9 @@ const EmployeePaymentModal: React.FC<EmployeePaymentModalProps> = ({
                       <h4 className="font-semibold text-gray-900">
                         {format(new Date(payment.month + '-01'), 'MMMM yyyy')}
                       </h4>
-                      <p className="text-green-600 font-bold">₹{payment.paidAmount.toLocaleString()}</p>
-                      {payment.paidDate && (
-                        <p className="text-sm text-gray-600">
-                          Paid on {format(new Date(payment.paidDate), 'MMM dd, yyyy')}
-                        </p>
-                      )}
+                      <p className="text-green-600 font-bold">
+                        ₹{payment.amountPaid.toLocaleString()}
+                      </p>
                     </div>
                     <button
                       onClick={() => markAsDue(payment)}
